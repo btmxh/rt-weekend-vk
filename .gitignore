@@ -1,0 +1,5 @@
+.clangd
+output.hdr
+build
+*.spv
+*.out
