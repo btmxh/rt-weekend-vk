@@ -27,8 +27,8 @@ def vec3(x: float) -> tuple[float, float, float]:
 
 @final
 class RenderData:
-    NUM_SPHERES = 128
-    NUM_MATERIALS = 128
+    NUM_SPHERES = 512
+    NUM_MATERIALS = NUM_SPHERES
 
     def __init__(self, width: int = 640, height: int = 360):
         self.width = width

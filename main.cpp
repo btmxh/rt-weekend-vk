@@ -15,8 +15,8 @@
 using vec3 = std::array<float, 3>;
 using vec4 = std::array<float, 4>;
 
-constexpr std::size_t NUM_SPHERES = 128;
-constexpr std::size_t NUM_MATERIALS = 128;
+constexpr std::size_t NUM_SPHERES = 512;
+constexpr std::size_t NUM_MATERIALS = NUM_SPHERES;
 
 enum class MaterialKind : std::int32_t {
   Lambert = 0,
@@ -347,6 +347,7 @@ int main() {
 
   auto elapsed = std::chrono::duration<double>(end - start);
   std::cout << "Done in " << elapsed.count() << "s" << std::endl;
+
   std::vector<std::uint8_t> img_data(width * height * 4);
 
   image_staging_buffer_dst.map([&](void *data) {

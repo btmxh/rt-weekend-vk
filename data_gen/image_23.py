@@ -27,11 +27,11 @@ def length(a: tuple[float, float, float]) -> float:
     return sqrt(a[0] * a[0] + a[1] * a[1] + a[2] * a[2])
 
 
-data = RenderData()
-k = 3
+data = RenderData(width=1920, height=1080)
+k = 11
 
-for a in range(-k, k + 1):
-    for b in range(-k, k + 1):
+for a in range(-k, k):
+    for b in range(-k, k):
         center_x = float(a) + 0.9 * random()
         center_y = 0.2
         center_z = float(b) + 0.9 * random()

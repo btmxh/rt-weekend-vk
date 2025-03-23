@@ -12,7 +12,7 @@ layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
 layout(binding = 0, rgba32f) uniform image2D image;
 
-layout(binding = 1, std140) uniform RenderData {
+layout(binding = 1, std140) WORLD_UNIFORM RenderData {
     world world;
 } data;
 
@@ -61,7 +61,7 @@ void main() {
     cam.focus_dist = 10.0;
     cam.defocus_angle = radians(0.6);
 
-    int num_samples = 1000;
+    int num_samples = 500;
     vec4 total_color = vec4(0.0);
 
     pcg_init_seed(i_tex_coords.x + i_tex_coords.y * i_img_size.x);

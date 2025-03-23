@@ -5,8 +5,15 @@
 #include "geom.glsl"
 #include "material.glsl"
 
-#define NUM_SPHERES 128
-#define NUM_MATERIALS 128
+#define NUM_SPHERES 512
+#define NUM_MATERIALS NUM_SPHERES
+
+#define SIZEOF_WORLD (NUM_MATERIALS * 16 + NUM_SPHERES * 20 + 8)
+#if SIZEOF_WORLD <= (16 << 10)
+#define WORLD_UNIFORM uniform
+#else
+#define WORLD_UNIFORM buffer
+#endif
 
 struct world {
     material materials[NUM_MATERIALS];
