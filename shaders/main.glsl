@@ -3,6 +3,9 @@
 // a flag for error handling, used in debugging
 bool error = false;
 
+#define NUM_SAMPLES_PER_PIXEL 500
+#define MAX_DEPTH 50
+
 #include "geom.glsl"
 #include "camera.glsl"
 #include "pcg.glsl"
@@ -26,7 +29,7 @@ vec3 ray_trace(ray r) {
     vec3 color = vec3(1.0);
 
     hit_info closest;
-    for (int i = 0; i < 10; ++i) {
+    for (int i = 0; i < MAX_DEPTH; ++i) {
         if (ray_hit_world(data.world, r, float_interval(0.01, 1e4), closest)) {
             vec3 attenuation;
             ray scattered;
@@ -61,15 +64,14 @@ void main() {
     cam.focus_dist = 10.0;
     cam.defocus_angle = radians(0.6);
 
-    int num_samples = 500;
     vec4 total_color = vec4(0.0);
 
     pcg_init_seed(i_tex_coords.x + i_tex_coords.y * i_img_size.x);
 
-    for (int i = 0; i < num_samples; ++i) {
+    for (int i = 0; i < NUM_SAMPLES_PER_PIXEL; ++i) {
         ray cam_ray = get_camera_ray(cam, i_tex_coords, i_img_size, pcg_next_vec2() * 0.5);
         vec4 color = vec4(ray_trace(cam_ray), 1.0);
-        total_color += color / float(num_samples);
+        total_color += color / float(NUM_SAMPLES_PER_PIXEL);
     }
 
     total_color = clamp(gamma_correct(total_color), vec4(0.0), vec4(1.0));
