@@ -75,10 +75,10 @@ which is an approximation of how fast the CPU renderer could be if run on my
 system. The task is to render a 1200x800 image of the cover scene, 10 samples
 per pixel, with a max ray tracing depth of 50.
 
-| Implementation     | Time (seconds) |
-| ------------------ | -------------- |
-| **Vulkan**         | **0.267734**   |
-| CUDA               | 1.63181        |
-| CPU (interpolated) | 21.9198        |
-| CPU (original)     | 90             |
+| Implementation     | Time (seconds) | Speedup (×, Vulkan) |
+| ------------------ | -------------- | ------------------- |
+| **Vulkan**         | **0.267734**   | -                   |
+| CUDA               | 1.63181        | 6.1×                |
+| CPU (interpolated) | 21.9198        | 81.9×               |
+| CPU (original)     | 90             | 336.3×              |
 
