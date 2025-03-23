@@ -68,7 +68,9 @@ Allen](https://developer.nvidia.com/blog/accelerated-ray-tracing-cuda/).
 Additional results for CPU rendering is presented based on Roger Allen's
 results: the original CPU time is measured on a 6-core i7 CPU, while the
 interpolated time is calculated as: 
+
 $$\text{InterpolatedCPU} = \text{OriginalCPU} \times \frac{\text{OurGPUTime}}{\text{AllenGPUTime}},$$
+
 which is an approximation of how fast the CPU renderer could be if run on my
 system. The task is to render a 1200x800 image of the cover scene, 10 samples
 per pixel, with a max ray tracing depth of 50.
