@@ -79,6 +79,6 @@ per pixel, with a max ray tracing depth of 50.
 | ------------------ | -------------- | ------------------- |
 | **Vulkan**         | **0.267734**   | -                   |
 | CUDA               | 1.63181        | 6.1×                |
-| CPU (interpolated) | 21.9198        | 81.9×               |
+| CPU (interpolated) | 31.2474        | 116.7×              |
 | CPU (original)     | 90             | 336.3×              |
 
