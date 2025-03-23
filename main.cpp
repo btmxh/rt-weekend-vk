@@ -334,6 +334,7 @@ int main() {
 
   vk::raii::Fence fence{device, vk::FenceCreateInfo{}};
 
+  auto start = std::chrono::high_resolution_clock::now();
   vk::SubmitInfo submit_info;
   submit_info.commandBufferCount = 1;
   submit_info.pCommandBuffers = &*cmd_buffer;
@@ -342,7 +343,10 @@ int main() {
       device.waitForFences(std::array<vk::Fence, 1>{*fence}, true, UINT64_MAX);
   vma::check_vk_result(static_cast<VkResult>(wait_result),
                        "Unable to wait for fence");
+  auto end = std::chrono::high_resolution_clock::now();
 
+  auto elapsed = std::chrono::duration<double>(end - start);
+  std::cout << "Done in " << elapsed.count() << "s" << std::endl;
   std::vector<std::uint8_t> img_data(width * height * 4);
 
   image_staging_buffer_dst.map([&](void *data) {
