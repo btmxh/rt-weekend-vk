@@ -1,11 +1,9 @@
 #include <VkBootstrap.h>
-#include <vulkan/vulkan_core.h>
 #include <vulkan/vulkan_raii.hpp>
 
 #include <cstdint>
 #include <fstream>
 #include <iostream>
-#include <vulkan/vulkan_structs.hpp>
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb/stb_image_write.h>
