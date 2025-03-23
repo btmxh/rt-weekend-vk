@@ -121,7 +121,7 @@ struct Allocator {
   }
 
   Buffer create_buffer(const VkBufferCreateInfo &buffer_info,
-                       const VmaAllocationCreateInfo alloc_info) {
+                       const VmaAllocationCreateInfo &alloc_info) {
     Buffer buf;
     buf.allocator = allocator;
     check_vk_result(vmaCreateBuffer(allocator, &buffer_info, &alloc_info,
@@ -182,10 +182,38 @@ struct Allocator {
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
     };
     VmaAllocationCreateInfo alloc_info = {
-        .usage = VMA_MEMORY_USAGE_GPU_ONLY,
+        .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
     };
 
     return create_image(img_info, alloc_info);
+  }
+
+  Buffer create_uniform_buffer(std::size_t size) {
+    VkBufferCreateInfo buf_info = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = size,
+        .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+                 VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+    };
+    VmaAllocationCreateInfo alloc_info = {
+        .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+    };
+    return create_buffer(buf_info, alloc_info);
+  }
+
+  Buffer create_storage_buffer(std::size_t size) {
+    VkBufferCreateInfo buf_info = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = size,
+        .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+    };
+    VmaAllocationCreateInfo alloc_info = {
+        .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+    };
+    return create_buffer(buf_info, alloc_info);
   }
 };
 } // namespace vma

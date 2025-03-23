@@ -1,14 +1,47 @@
 #include <VkBootstrap.h>
+#include <vulkan/vulkan_core.h>
 #include <vulkan/vulkan_raii.hpp>
 
 #include <cstdint>
 #include <fstream>
 #include <iostream>
+#include <vulkan/vulkan_structs.hpp>
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb/stb_image_write.h>
 
 #include "vma.hpp"
+
+using vec3 = std::array<float, 3>;
+using vec4 = std::array<float, 4>;
+
+constexpr std::size_t NUM_SPHERES = 128;
+constexpr std::size_t NUM_MATERIALS = 128;
+
+enum class MaterialKind : std::int32_t {
+  Lambert = 0,
+  Dielectric = 1,
+  Metal = 2,
+};
+
+struct Material {
+  vec3 color;
+  MaterialKind kind;
+};
+
+struct GPURenderData {
+  Material materials[NUM_MATERIALS];
+  vec4 spheres[NUM_SPHERES];
+  std::int32_t sphere_mat[NUM_SPHERES];
+  std::int32_t num_spheres, num_materials;
+};
+
+constexpr bool USE_UNIFORM_BUFFER = sizeof(GPURenderData) < (16 << 10);
+
+struct RenderData {
+  std::uint32_t width, height;
+  GPURenderData gpu;
+};
 
 auto create_command_pool_and_buffer(vk::raii::Device &device,
                                     std::uint32_t queue_family_index,
@@ -24,25 +57,6 @@ auto create_command_pool_and_buffer(vk::raii::Device &device,
   alloc_info.commandBufferCount = 1;
   vk::raii::CommandBuffers buffers{device, alloc_info};
   buffer = std::move(buffers[0]);
-}
-
-auto create_image_staging_buffer(vma::Allocator &alloc, vma::Image &img,
-                                 std::uint32_t width, std::uint32_t height)
-    -> decltype(auto) {
-  std::vector<float> data;
-  data.resize(width * height * 4);
-
-  for (std::uint32_t y = 0; y < height; ++y) {
-    for (std::uint32_t x = 0; x < width; ++x) {
-      data[(y * width + x) * 4 + 0] = static_cast<float>(x) / width;
-      data[(y * width + x) * 4 + 1] = static_cast<float>(y) / height;
-      data[(y * width + x) * 4 + 2] = 0.0f;
-      data[(y * width + x) * 4 + 3] = 1.0f;
-    }
-  }
-
-  return alloc.create_staging_buffer_src(data.size() * sizeof(data[0]),
-                                         data.data());
 }
 
 auto load_shader_module(const char *path, vk::raii::Device &device)
@@ -109,8 +123,47 @@ int main() {
 
   vma::Allocator allocator{*inst, *phys_device, *device};
 
+  vma::Buffer ubo_staging_buffer_src;
   std::uint32_t width = 640, height = 360;
+  {
+    auto render_data = std::make_unique<RenderData>();
+    try {
+      std::ifstream data_file{"render.dat"};
+      data_file.exceptions(std::ios::badbit | std::ifstream::failbit);
+      data_file.read(reinterpret_cast<char *>(render_data.get()),
+                     sizeof(*render_data));
+      std::size_t num_spheres = render_data->gpu.num_spheres;
+      std::cout << "Loaded " << num_spheres << " spheres." << std::endl;
+    } catch (std::exception &ex) {
+      std::cerr << "Unable to open render.dat, using sample data instead."
+                << "(Exception: " << ex.what() << ")" << std::endl;
+      render_data->width = 640;
+      render_data->height = 360;
+      render_data->gpu.spheres[0] = {0.0f, 0.0f, -1.0f, 0.5f};
+      render_data->gpu.spheres[1] = {0.0f, -100.5f, -1.0f, 100.0f};
+      render_data->gpu.sphere_mat[0] = 1;
+      render_data->gpu.sphere_mat[1] = 0;
+      render_data->gpu.materials[0] = {vec3{0.5, 0.5, 0.5},
+                                       MaterialKind::Lambert};
+      render_data->gpu.materials[1] = {vec3{0.5, 0.5, 0.5},
+                                       MaterialKind::Metal};
+      render_data->gpu.num_spheres = 2;
+      render_data->gpu.num_materials = 2;
+    }
+
+    ubo_staging_buffer_src = allocator.create_staging_buffer_src(
+        sizeof(render_data->gpu), &render_data->gpu);
+    width = render_data->width;
+    height = render_data->height;
+  }
+
   auto image = allocator.create_image_rgba32f_2d(width, height);
+  vma::Buffer gpu_buffer;
+  if constexpr (USE_UNIFORM_BUFFER) {
+    gpu_buffer = allocator.create_uniform_buffer(sizeof(GPURenderData));
+  } else {
+    gpu_buffer = allocator.create_storage_buffer(sizeof(GPURenderData));
+  }
 
   vk::ImageViewCreateInfo image_view_info;
   image_view_info.image = image.image;
@@ -120,21 +173,27 @@ int main() {
       vk::ImageSubresourceRange{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
   vk::raii::ImageView image_view{device, image_view_info};
 
-  auto image_staging_buffer_src =
-      create_image_staging_buffer(allocator, image, width, height);
   auto image_staging_buffer_dst =
       allocator.create_staging_buffer_dst(width * height * 4 * sizeof(float));
-  auto compute_shader_module = load_shader_module("compute.spv", device);
+  auto compute_shader_module = load_shader_module("shaders/main.spv", device);
 
-  vk::DescriptorSetLayoutBinding desc_set_layout_binding;
-  desc_set_layout_binding.binding = 0;
-  desc_set_layout_binding.descriptorType = vk::DescriptorType::eStorageImage;
-  desc_set_layout_binding.descriptorCount = 1;
-  desc_set_layout_binding.stageFlags = vk::ShaderStageFlagBits::eCompute;
+  vk::DescriptorSetLayoutBinding bindings[2];
+  bindings[0].binding = 0;
+  bindings[0].descriptorType = vk::DescriptorType::eStorageImage;
+  bindings[0].descriptorCount = 1;
+  bindings[0].stageFlags = vk::ShaderStageFlagBits::eCompute;
+
+  bindings[1].binding = 1;
+  bindings[1].descriptorType = USE_UNIFORM_BUFFER
+                                   ? vk::DescriptorType::eUniformBuffer
+                                   : vk::DescriptorType::eStorageBuffer;
+  bindings[1].descriptorCount = 1;
+  bindings[1].stageFlags = vk::ShaderStageFlagBits::eCompute;
 
   vk::DescriptorSetLayoutCreateInfo desc_set_layout_info;
-  desc_set_layout_info.bindingCount = 1;
-  desc_set_layout_info.pBindings = &desc_set_layout_binding;
+  desc_set_layout_info.bindingCount = 2;
+  desc_set_layout_info.pBindings = bindings;
+
   vk::raii::DescriptorSetLayout desc_set_layout{device, desc_set_layout_info};
 
   vk::PipelineLayoutCreateInfo create_info;
@@ -152,12 +211,17 @@ int main() {
   vk::raii::Pipeline compute_pipeline{device, nullptr, compute_pipeline_info};
 
   vk::DescriptorPoolCreateInfo desc_pool_info;
-  vk::DescriptorPoolSize storage_image_pool_size{
-      vk::DescriptorType::eStorageImage, 1};
+  std::array<vk::DescriptorPoolSize, 2> storage_image_pool_size = {
+      vk::DescriptorPoolSize{vk::DescriptorType::eStorageImage, 1},
+      vk::DescriptorPoolSize{USE_UNIFORM_BUFFER
+                                 ? vk::DescriptorType::eUniformBuffer
+                                 : vk::DescriptorType::eStorageBuffer,
+                             1},
+  };
   desc_pool_info.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
   desc_pool_info.maxSets = 1;
-  desc_pool_info.poolSizeCount = 1;
-  desc_pool_info.pPoolSizes = &storage_image_pool_size;
+  desc_pool_info.poolSizeCount = storage_image_pool_size.size();
+  desc_pool_info.pPoolSizes = storage_image_pool_size.data();
   vk::raii::DescriptorPool desc_pool{device, desc_pool_info};
 
   vk::DescriptorSetAllocateInfo desc_set_alloc_info;
@@ -171,15 +235,27 @@ int main() {
   image_write_desc_set.imageView = *image_view;
   image_write_desc_set.imageLayout = vk::ImageLayout::eGeneral;
 
-  vk::WriteDescriptorSet write_desc_set;
-  write_desc_set.dstSet = *descriptor_set;
-  write_desc_set.dstBinding = 0;
-  write_desc_set.dstArrayElement = 0;
-  write_desc_set.descriptorType = vk::DescriptorType::eStorageImage;
-  write_desc_set.descriptorCount = 1;
-  write_desc_set.pImageInfo = &image_write_desc_set;
-  device.updateDescriptorSets(
-      std::array<vk::WriteDescriptorSet, 1>{write_desc_set}, {});
+  vk::DescriptorBufferInfo buffer_write_desc_set;
+  buffer_write_desc_set.buffer = gpu_buffer.buffer;
+  buffer_write_desc_set.offset = 0;
+  buffer_write_desc_set.range = sizeof(GPURenderData);
+
+  vk::WriteDescriptorSet write_desc_set[2];
+  write_desc_set[0].dstSet = *descriptor_set;
+  write_desc_set[0].dstBinding = 0;
+  write_desc_set[0].dstArrayElement = 0;
+  write_desc_set[0].descriptorType = vk::DescriptorType::eStorageImage;
+  write_desc_set[0].descriptorCount = 1;
+  write_desc_set[0].pImageInfo = &image_write_desc_set;
+  write_desc_set[1].dstSet = *descriptor_set;
+  write_desc_set[1].dstBinding = 1;
+  write_desc_set[1].dstArrayElement = 0;
+  write_desc_set[1].descriptorType = USE_UNIFORM_BUFFER
+                                         ? vk::DescriptorType::eUniformBuffer
+                                         : vk::DescriptorType::eStorageBuffer;
+  write_desc_set[1].descriptorCount = 1;
+  write_desc_set[1].pBufferInfo = &buffer_write_desc_set;
+  device.updateDescriptorSets(write_desc_set, {});
 
   vk::CommandBufferBeginInfo begin_info;
   begin_info.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
@@ -192,51 +268,36 @@ int main() {
   copy_region.imageSubresource.layerCount = 1;
   copy_region.imageSubresource.mipLevel = 0;
 
+  vk::BufferCopy buf_copy_region;
+  buf_copy_region.size = sizeof(GPURenderData);
+
+  cmd_buffer.copyBuffer(ubo_staging_buffer_src.buffer, gpu_buffer.buffer,
+                        std::array<vk::BufferCopy, 1>{buf_copy_region});
   {
-    vk::ImageMemoryBarrier undef_to_transfer_src_image_barrier;
-    undef_to_transfer_src_image_barrier.oldLayout = vk::ImageLayout::eUndefined;
-    undef_to_transfer_src_image_barrier.newLayout =
-        vk::ImageLayout::eTransferDstOptimal;
-    undef_to_transfer_src_image_barrier.srcAccessMask =
-        vk::AccessFlagBits::eNone;
-    undef_to_transfer_src_image_barrier.dstAccessMask =
-        vk::AccessFlagBits::eTransferWrite;
-    undef_to_transfer_src_image_barrier.srcQueueFamilyIndex =
-        VK_QUEUE_FAMILY_IGNORED;
-    undef_to_transfer_src_image_barrier.dstQueueFamilyIndex =
-        VK_QUEUE_FAMILY_IGNORED;
-    undef_to_transfer_src_image_barrier.image = image.image;
-    undef_to_transfer_src_image_barrier.subresourceRange =
+    vk::ImageMemoryBarrier undef_to_shader_image_barrier;
+    undef_to_shader_image_barrier.oldLayout = vk::ImageLayout::eUndefined;
+    undef_to_shader_image_barrier.newLayout = vk::ImageLayout::eGeneral;
+    undef_to_shader_image_barrier.srcAccessMask = vk::AccessFlagBits::eNone;
+    undef_to_shader_image_barrier.dstAccessMask =
+        vk::AccessFlagBits::eShaderWrite;
+    undef_to_shader_image_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    undef_to_shader_image_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    undef_to_shader_image_barrier.image = image.image;
+    undef_to_shader_image_barrier.subresourceRange =
         vk::ImageSubresourceRange{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
-    cmd_buffer.pipelineBarrier(vk::PipelineStageFlagBits::eTopOfPipe,
-                               vk::PipelineStageFlagBits::eTransfer, {}, {}, {},
-                               std::array<vk::ImageMemoryBarrier, 1>{
-                                   undef_to_transfer_src_image_barrier});
-  }
-  cmd_buffer.copyBufferToImage(image_staging_buffer_src.buffer, image.image,
-                               vk::ImageLayout::eTransferDstOptimal,
-                               std::array<vk::BufferImageCopy, 1>{copy_region});
-  {
-    vk::ImageMemoryBarrier transfer_src_to_shader_image_barrier;
-    transfer_src_to_shader_image_barrier.oldLayout =
-        vk::ImageLayout::eTransferDstOptimal;
-    transfer_src_to_shader_image_barrier.newLayout = vk::ImageLayout::eGeneral;
-    transfer_src_to_shader_image_barrier.srcAccessMask =
-        vk::AccessFlagBits::eTransferWrite;
-    transfer_src_to_shader_image_barrier.dstAccessMask =
-        vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite;
-    transfer_src_to_shader_image_barrier.srcQueueFamilyIndex =
-        VK_QUEUE_FAMILY_IGNORED;
-    transfer_src_to_shader_image_barrier.dstQueueFamilyIndex =
-        VK_QUEUE_FAMILY_IGNORED;
-    transfer_src_to_shader_image_barrier.image = image.image;
-    transfer_src_to_shader_image_barrier.subresourceRange =
-        vk::ImageSubresourceRange{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+
+    vk::BufferMemoryBarrier ubo_barrier;
+    ubo_barrier.srcAccessMask = vk::AccessFlagBits::eNone;
+    ubo_barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+    ubo_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    ubo_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    ubo_barrier.buffer = gpu_buffer.buffer;
+    ubo_barrier.offset = 0;
+    ubo_barrier.size = sizeof(GPURenderData);
+
     cmd_buffer.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
                                vk::PipelineStageFlagBits::eComputeShader, {},
-                               {}, {},
-                               std::array<vk::ImageMemoryBarrier, 1>{
-                                   transfer_src_to_shader_image_barrier});
+                               {}, ubo_barrier, undef_to_shader_image_barrier);
   }
   cmd_buffer.bindDescriptorSets(
       vk::PipelineBindPoint::eCompute, *compute_pipeline_layout, 0,
@@ -285,8 +346,31 @@ int main() {
   std::vector<std::uint8_t> img_data(width * height * 4);
 
   image_staging_buffer_dst.map([&](void *data) {
+    std::span<float> flt_pixels(static_cast<float *>(data), width * height * 4);
+    for (int x = 0; x < width; ++x) {
+      for (int y = 0; y < height; ++y) {
+        for (int c = 0; c < 4; ++c) {
+          float value = flt_pixels[c + (y + x * height) * 4];
+          if (value < 0.0 || value > 1.0 || std::isnan(value)) {
+            std::cerr << "Invalid pixel value: " << value << " (x=" << x
+                      << ", y=" << y << ", c=" << c << ")" << std::endl;
+          }
+        }
+      }
+    }
+#ifdef OUTPUT_PNG
+    std::vector<unsigned char> pixels(width * height * 4);
+    std::transform(flt_pixels.begin(), flt_pixels.end(), pixels.begin(),
+                   [](float val) {
+                     val = std::clamp(val, 0.0f, 1.0f);
+                     return static_cast<unsigned char>(val * 255.0f);
+                   });
+    stbi_write_png("output.png", width, height, 4, pixels.data(), 0);
+#else
+
     stbi_write_hdr("output.hdr", static_cast<int>(width),
                    static_cast<int>(height), 4, static_cast<float *>(data));
+#endif
   });
 
   return 0;

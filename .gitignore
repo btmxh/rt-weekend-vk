@@ -1,5 +1,8 @@
 .clangd
+output.png
 output.hdr
 build
 *.spv
 *.out
+*.dat
+__pycache__
