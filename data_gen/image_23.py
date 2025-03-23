@@ -41,7 +41,7 @@ for a in range(-k, k):
         if length(sub_tuple((center_x, center_y, center_z), (4.0, 0.2, 0.0))) <= 0.9:
             continue
 
-        match choices(["lambert", "dielectric", "metal"], weights=[0.8, 0.15, 0.05])[0]:
+        match choices(["lambert", "dielectric", "metal"], weights=[0.8, 0.05, 0.15])[0]:
             case "lambert":
                 albedo = mul_tuple(random_color(), random_color())
                 idx = data.add_lambert(albedo)
