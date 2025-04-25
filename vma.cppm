@@ -1,16 +1,15 @@
-#pragma once
+module;
 
 #define VMA_IMPLEMENTATION
-#include <cstdint>
-#include <cstring>
-#include <sstream>
-#include <stdexcept>
-#include <utility>
+#include <vulkan/vulkan_core.h>
 #include <vk_mem_alloc.h>
 #include <vulkan/vk_enum_string_helper.h>
-#include <vulkan/vulkan_core.h>
 
-namespace vma {
+import std;
+
+export module vma;
+
+export namespace vma {
 
 struct Image {
   VmaAllocator allocator;
