@@ -73,11 +73,20 @@ auto load_shader_module(const char *path, vk::raii::Device &device)
 
 int main() {
   vkb::InstanceBuilder b_inst;
-  auto r_inst = b_inst.set_app_name("rt-weekend-vk")
-                    .request_validation_layers()
-                    .use_default_debug_messenger()
-                    .set_headless()
-                    .build();
+  auto r_inst =
+      b_inst.set_app_name("rt-weekend-vk")
+          .request_validation_layers()
+          .add_validation_feature_enable(
+              VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT)
+          .add_validation_feature_enable(
+              VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT)
+          .add_validation_feature_enable(
+              VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT)
+          .add_validation_feature_enable(
+              VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT)
+          .use_default_debug_messenger()
+          .set_headless()
+          .build();
   if (!r_inst) {
     std::cerr << "Unable to create instance: " << r_inst.error().message()
               << std::endl;
