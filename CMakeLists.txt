@@ -28,7 +28,10 @@ find_package(vk-bootstrap REQUIRED)
 add_library(vma_wrapper)
 target_sources(vma_wrapper
   PUBLIC FILE_SET CXX_MODULES
+  BASE_DIRS ${CMAKE_CURRENT_LIST_DIR}
   FILES ${CMAKE_CURRENT_LIST_DIR}/vma.cppm
+
+  PRIVATE ${CMAKE_CURRENT_LIST_DIR}/vma.cpp
 )
 target_compile_features(vma_wrapper PUBLIC cxx_std_23)
 target_link_libraries(vma_wrapper PUBLIC VulkanHpp)
