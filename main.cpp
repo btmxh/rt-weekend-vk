@@ -1,11 +1,10 @@
-#include <VkBootstrap.h>
-
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#include <stb/stb_image_write.h>
+#include <cstdio> // for stderr
 
 import std;
 import vulkan_hpp;
 import vma;
+import vkb;
+import stbi;
 
 template <class... Args>
 void eprintln(std::format_string<Args...> fmt, Args &&...args) {
@@ -287,8 +286,8 @@ int main() {
     undef_to_shader_image_barrier.srcAccessMask = vk::AccessFlagBits::eNone;
     undef_to_shader_image_barrier.dstAccessMask =
         vk::AccessFlagBits::eShaderWrite;
-    undef_to_shader_image_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    undef_to_shader_image_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    undef_to_shader_image_barrier.srcQueueFamilyIndex = vk::QueueFamilyIgnored;
+    undef_to_shader_image_barrier.dstQueueFamilyIndex = vk::QueueFamilyIgnored;
     undef_to_shader_image_barrier.image = image.image;
     undef_to_shader_image_barrier.subresourceRange =
         vk::ImageSubresourceRange{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
@@ -296,8 +295,8 @@ int main() {
     vk::BufferMemoryBarrier ubo_barrier;
     ubo_barrier.srcAccessMask = vk::AccessFlagBits::eNone;
     ubo_barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
-    ubo_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    ubo_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    ubo_barrier.srcQueueFamilyIndex = vk::QueueFamilyIgnored;
+    ubo_barrier.dstQueueFamilyIndex = vk::QueueFamilyIgnored;
     ubo_barrier.buffer = gpu_buffer.buffer;
     ubo_barrier.offset = 0;
     ubo_barrier.size = sizeof(GPURenderData);
@@ -321,9 +320,9 @@ int main() {
     shader_to_transfer_dst_image_barrier.dstAccessMask =
         vk::AccessFlagBits::eTransferRead;
     shader_to_transfer_dst_image_barrier.srcQueueFamilyIndex =
-        VK_QUEUE_FAMILY_IGNORED;
+        vk::QueueFamilyIgnored;
     shader_to_transfer_dst_image_barrier.dstQueueFamilyIndex =
-        VK_QUEUE_FAMILY_IGNORED;
+        vk::QueueFamilyIgnored;
     shader_to_transfer_dst_image_barrier.image = image.image;
     shader_to_transfer_dst_image_barrier.subresourceRange =
         vk::ImageSubresourceRange{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
@@ -347,9 +346,9 @@ int main() {
   submit_info.pCommandBuffers = &*cmd_buffer;
   compute_queue.submit(submit_info, *fence);
   auto wait_result =
-      device.waitForFences(std::array<vk::Fence, 1>{*fence}, true, UINT64_MAX);
-  vma::check_vk_result(static_cast<VkResult>(wait_result),
-                       "Unable to wait for fence");
+      device.waitForFences(std::array<vk::Fence, 1>{*fence}, true,
+                           std::numeric_limits<std::uint64_t>::max());
+  vma::check_vk_result(wait_result, "Unable to wait for fence");
   auto end = std::chrono::high_resolution_clock::now();
 
   auto elapsed = std::chrono::duration<double>(end - start);
@@ -377,10 +376,10 @@ int main() {
                      val = std::clamp(val, 0.0f, 1.0f);
                      return static_cast<unsigned char>(val * 255.0f);
                    });
-    stbi_write_png("output.png", width, height, 4, pixels.data(), 0);
+    stbi::write_png("output.png", width, height, 4, pixels.data(), 0);
 #else
-    stbi_write_hdr("output.hdr", static_cast<int>(width),
-                   static_cast<int>(height), 4, static_cast<float *>(data));
+    stbi::write_hdr("output.hdr", static_cast<int>(width),
+                    static_cast<int>(height), 4, static_cast<float *>(data));
 #endif
   });
 

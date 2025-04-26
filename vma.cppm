@@ -1,13 +1,11 @@
 module;
 
-#define VMA_IMPLEMENTATION
-#include <vulkan/vulkan_core.h>
 #include <vk_mem_alloc.h>
-#include <vulkan/vk_enum_string_helper.h>
-
-import std;
 
 export module vma;
+
+import std;
+import vulkan_hpp;
 
 export namespace vma {
 
@@ -83,14 +81,18 @@ struct Buffer {
   operator VkBuffer() const { return buffer; }
 };
 
-inline void check_vk_result(VkResult err, const char *msg) {
-  if (err == VK_SUCCESS) {
+inline void check_vk_result(vk::Result err, const char *msg) {
+  if (err == vk::Result::eSuccess) {
     return;
   }
 
   std::stringstream ss;
-  ss << msg << ": " << string_VkResult(err);
+  ss << msg << ": " << vk::to_string(err);
   throw std::runtime_error{ss.str()};
+}
+
+inline void check_vk_result(VkResult err, const char *msg) {
+  check_vk_result(vk::Result{err}, msg);
 }
 
 struct Allocator {

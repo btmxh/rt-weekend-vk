@@ -30,13 +30,33 @@ target_sources(vma_wrapper
   PUBLIC FILE_SET CXX_MODULES
   BASE_DIRS ${CMAKE_CURRENT_LIST_DIR}
   FILES ${CMAKE_CURRENT_LIST_DIR}/vma.cppm
+
+  PRIVATE ${CMAKE_CURRENT_LIST_DIR}/vma.cpp
 )
 target_compile_features(vma_wrapper PUBLIC cxx_std_23)
-target_link_libraries(vma_wrapper PUBLIC Vulkan::Vulkan)
+target_link_libraries(vma_wrapper PUBLIC VulkanHpp)
+
+add_library(vkb_wrapper)
+target_sources(vkb_wrapper
+  PUBLIC FILE_SET CXX_MODULES
+  BASE_DIRS ${CMAKE_CURRENT_LIST_DIR}
+  FILES ${CMAKE_CURRENT_LIST_DIR}/vkb.cppm
+)
+target_compile_features(vkb_wrapper PUBLIC cxx_std_23)
+target_link_libraries(vkb_wrapper PUBLIC VulkanHpp vk-bootstrap::vk-bootstrap)
+
+add_library(stbi_wrapper)
+target_sources(stbi_wrapper
+  PUBLIC FILE_SET CXX_MODULES
+  BASE_DIRS ${CMAKE_CURRENT_LIST_DIR}
+  FILES ${CMAKE_CURRENT_LIST_DIR}/stbi.cppm
+)
+
+target_compile_features(stbi_wrapper PUBLIC cxx_std_23)
 
 add_executable(rt_weekend_vk main.cpp)
 target_compile_features(rt_weekend_vk PRIVATE cxx_std_23)
-target_link_libraries(rt_weekend_vk PRIVATE VulkanHpp vma_wrapper vk-bootstrap::vk-bootstrap)
+target_link_libraries(rt_weekend_vk PRIVATE VulkanHpp vma_wrapper vkb_wrapper stbi_wrapper)
 
 if(OUTPUT_PNG)
   target_compile_definitions(rt_weekend_vk PRIVATE OUTPUT_PNG)
