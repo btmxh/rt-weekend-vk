@@ -1,14 +1,15 @@
-#include <VkBootstrap.h>
-#include <vulkan/vulkan_raii.hpp>
+#include <cstdio> // for stderr
 
-#include <cstdint>
-#include <fstream>
-#include <iostream>
+import std;
+import vulkan_hpp;
+import vma;
+import vkb;
+import stbi;
 
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#include <stb/stb_image_write.h>
-
-#include "vma.hpp"
+template <class... Args>
+void eprintln(std::format_string<Args...> fmt, Args &&...args) {
+  std::println(stderr, fmt, std::forward<Args>(args)...);
+}
 
 using vec3 = std::array<float, 3>;
 using vec4 = std::array<float, 4>;
@@ -88,8 +89,7 @@ int main() {
           .set_headless()
           .build();
   if (!r_inst) {
-    std::cerr << "Unable to create instance: " << r_inst.error().message()
-              << std::endl;
+    eprintln("Unable to create instance: {}", r_inst.error().message());
     return 1;
   }
 
@@ -101,15 +101,13 @@ int main() {
   vkb::PhysicalDeviceSelector pd_selector{vkb_inst};
   auto r_pd = pd_selector.set_minimum_version(1, 3).select();
   if (!r_pd) {
-    std::cerr << "Unable to pick physical device: " << r_pd.error().message()
-              << std::endl;
+    eprintln("Unable to pick physical device: {}", r_pd.error().message());
   }
 
   vkb::DeviceBuilder d_builder{r_pd.value()};
   auto r_device = d_builder.build();
   if (!r_device) {
-    std::cerr << "Unable to create device: " << r_device.error().message()
-              << std::endl;
+    eprintln("Unable to create device: {}", r_device.error().message());
   }
 
   vk::raii::PhysicalDevice phys_device{inst, r_pd.value().physical_device};
@@ -117,8 +115,8 @@ int main() {
 
   auto r_compute_queue_idx = r_device->get_queue_index(vkb::QueueType::compute);
   if (!r_compute_queue_idx) {
-    std::cerr << "Unable to get compute queue: "
-              << r_compute_queue_idx.error().message() << std::endl;
+    eprintln("Unable to get compute queue: {}",
+             r_compute_queue_idx.error().message());
   }
 
   auto compute_queue = device.getQueue(r_compute_queue_idx.value(), 0);
@@ -140,10 +138,11 @@ int main() {
       data_file.read(reinterpret_cast<char *>(render_data.get()),
                      sizeof(*render_data));
       std::size_t num_spheres = render_data->gpu.num_spheres;
-      std::cout << "Loaded " << num_spheres << " spheres." << std::endl;
+      std::println("Loaded {} spheres", num_spheres);
     } catch (std::exception &ex) {
-      std::cerr << "Unable to open render.dat, using sample data instead."
-                << "(Exception: " << ex.what() << ")" << std::endl;
+      eprintln("Unable to open render.dat, using sample data instead"
+               "(Exception: {})",
+               ex.what());
       render_data->width = 640;
       render_data->height = 360;
       render_data->gpu.spheres[0] = {0.0f, 0.0f, -1.0f, 0.5f};
@@ -287,8 +286,8 @@ int main() {
     undef_to_shader_image_barrier.srcAccessMask = vk::AccessFlagBits::eNone;
     undef_to_shader_image_barrier.dstAccessMask =
         vk::AccessFlagBits::eShaderWrite;
-    undef_to_shader_image_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    undef_to_shader_image_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    undef_to_shader_image_barrier.srcQueueFamilyIndex = vk::QueueFamilyIgnored;
+    undef_to_shader_image_barrier.dstQueueFamilyIndex = vk::QueueFamilyIgnored;
     undef_to_shader_image_barrier.image = image.image;
     undef_to_shader_image_barrier.subresourceRange =
         vk::ImageSubresourceRange{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
@@ -296,8 +295,8 @@ int main() {
     vk::BufferMemoryBarrier ubo_barrier;
     ubo_barrier.srcAccessMask = vk::AccessFlagBits::eNone;
     ubo_barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
-    ubo_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    ubo_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    ubo_barrier.srcQueueFamilyIndex = vk::QueueFamilyIgnored;
+    ubo_barrier.dstQueueFamilyIndex = vk::QueueFamilyIgnored;
     ubo_barrier.buffer = gpu_buffer.buffer;
     ubo_barrier.offset = 0;
     ubo_barrier.size = sizeof(GPURenderData);
@@ -321,9 +320,9 @@ int main() {
     shader_to_transfer_dst_image_barrier.dstAccessMask =
         vk::AccessFlagBits::eTransferRead;
     shader_to_transfer_dst_image_barrier.srcQueueFamilyIndex =
-        VK_QUEUE_FAMILY_IGNORED;
+        vk::QueueFamilyIgnored;
     shader_to_transfer_dst_image_barrier.dstQueueFamilyIndex =
-        VK_QUEUE_FAMILY_IGNORED;
+        vk::QueueFamilyIgnored;
     shader_to_transfer_dst_image_barrier.image = image.image;
     shader_to_transfer_dst_image_barrier.subresourceRange =
         vk::ImageSubresourceRange{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
@@ -347,13 +346,13 @@ int main() {
   submit_info.pCommandBuffers = &*cmd_buffer;
   compute_queue.submit(submit_info, *fence);
   auto wait_result =
-      device.waitForFences(std::array<vk::Fence, 1>{*fence}, true, UINT64_MAX);
-  vma::check_vk_result(static_cast<VkResult>(wait_result),
-                       "Unable to wait for fence");
+      device.waitForFences(std::array<vk::Fence, 1>{*fence}, true,
+                           std::numeric_limits<std::uint64_t>::max());
+  vma::check_vk_result(wait_result, "Unable to wait for fence");
   auto end = std::chrono::high_resolution_clock::now();
 
   auto elapsed = std::chrono::duration<double>(end - start);
-  std::cout << "Done in " << elapsed.count() << "s" << std::endl;
+  std::println("Done in {}s", elapsed.count());
 
   std::vector<std::uint8_t> img_data(width * height * 4);
 
@@ -364,8 +363,8 @@ int main() {
         for (int c = 0; c < 4; ++c) {
           float value = flt_pixels[c + (y + x * height) * 4];
           if (value < 0.0 || value > 1.0 || std::isnan(value)) {
-            std::cerr << "Invalid pixel value: " << value << " (x=" << x
-                      << ", y=" << y << ", c=" << c << ")" << std::endl;
+            eprintln("Invalid pixel value: {} (x={}, y={}, c={})", value, x, y,
+                     c);
           }
         }
       }
@@ -377,11 +376,10 @@ int main() {
                      val = std::clamp(val, 0.0f, 1.0f);
                      return static_cast<unsigned char>(val * 255.0f);
                    });
-    stbi_write_png("output.png", width, height, 4, pixels.data(), 0);
+    stbi::write_png("output.png", width, height, 4, pixels.data(), 0);
 #else
-
-    stbi_write_hdr("output.hdr", static_cast<int>(width),
-                   static_cast<int>(height), 4, static_cast<float *>(data));
+    stbi::write_hdr("output.hdr", static_cast<int>(width),
+                    static_cast<int>(height), 4, static_cast<float *>(data));
 #endif
   });
 

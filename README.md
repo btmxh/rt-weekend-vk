@@ -5,14 +5,8 @@ using Vulkan compute shaders.
 
 Dependencies: [vulkan.hpp](https://github.com/KhronosGroup/Vulkan-Hpp),
 [vk-bootstrap](https://github.com/charles-lunarg/vk-bootstrap),
-[stb_image_write.h](https://github.com/nothings/stb).
-
-Build & run scripts in `scripts/` is only included for convenience, it requires
-[g++](https://gcc.gnu.org/) (C++ compiler),
-[glslc](https://github.com/google/shaderc) (GLSL to SPIR-V compiler) and
-[viu](https://github.com/atanunq/viu) (command-line image viewer), but other
-tools work fine. Support for other tools are NOT provided, user with different
-setups must tweak the scripts or run them manually.
+[stb_image_write.h](https://github.com/nothings/stb). Install them to your
+system or use some mechanisms to make them visible to CMake.
 
 ## Usage
 
@@ -37,16 +31,19 @@ storage buffer ~~objects~~) in `main.cpp` and `main.glsl`.
 >Note: ~~objects~~ are strikethroughs since buffer object is only a concept
 >from OpenGL, not Vulkan.
 
-Building the application requires a C++20 compiler and some Vulkan libraries.
+Building the application requires CMake, a C++23 compiler and some Vulkan
+libraries mentioned above.
 ```sh
-# generate output.hdr file
-g++ main.cpp -lvulkan -lvk-bootstrap -std=c++20
-# generate output.png file
-g++ main.cpp -lvulkan -lvk-bootstrap -std=c++20 -DOUTPUT_PNG
+# configure
+cmake -S. -Bbuild # maybe add CMAKE_TOOLCHAIN_FILE to switch to clang...
+
+# build
+cmake --build build
 ```
 
 Compiling the shader requires a GLSL-to-SPIR-V compiler that supports
-`#include` directives.
+`#include` directives. This might be integrated with the new CMake build
+system.
 ```sh
 glslc -fshader-stage=comp shaders/main.glsl -o shaders/main.spv -O -Werror
 ```
@@ -72,7 +69,8 @@ interpolated time is calculated as:
 $$\text{InterpolatedCPU} = \text{OriginalCPU} \times \frac{\text{OurGPUTime}}{\text{AllenGPUTime}},$$
 
 which is an approximation of how fast the CPU renderer could be if run on my
-system. The task is to render a 1200x800 image of the cover scene, 10 samples
+system (assuming that CPU technology evolved at the same rate as that of GPU).
+The task is to render a 1200x800 image of the cover scene, 10 samples
 per pixel, with a max ray tracing depth of 50.
 
 | Implementation     | Time (seconds) | Speedup (×, Vulkan) |
